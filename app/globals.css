@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  /* MLBB Forge design tokens */
+  --color-forge-bg: #0a0a0f;
+  --color-forge-surface: #12121a;
+  --color-forge-border: #2a2a3a;
+  --color-forge-gold: #c8a84b;
+  --color-forge-gold-light: #e8c96a;
+  --color-forge-red: #c0392b;
+  --color-forge-blue: #2980b9;
+  --color-forge-green: #27ae60;
+
+  /* Fonts — CSS vars are injected by next/font in layout.tsx */
+  --font-cinzel: var(--font-cinzel), serif;
+  --font-body: var(--font-inter), sans-serif;
+}
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #e8e8e8;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #12121a; }
+::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #c8a84b66; }
+
+/* Gold glow utility */
+.glow-gold {
+  box-shadow: 0 0 12px 2px #c8a84b44;
+}

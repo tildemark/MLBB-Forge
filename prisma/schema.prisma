@@ -1,0 +1,329 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Versioning
+// ---------------------------------------------------------------------------
+model PatchVersion {
+  id        String   @id @default(cuid())
+  version   String   @unique // e.g. "1.8.2"
+  isLatest  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  heroes HeroStats[]
+  items  ItemStats[]
+  builds Build[]
+}
+
+// ---------------------------------------------------------------------------
+// Heroes
+// ---------------------------------------------------------------------------
+model Hero {
+  id          String      @id @default(cuid())
+  slug        String      @unique // url-friendly, e.g. "layla"
+  name        String
+  title       String?
+  role        HeroRole[]
+  specialty   String?
+  lane        String?
+  resource    String?      // "Mana" | "Energy" | "HP" | "None"
+  dmgType     String?      // "Physical" | "Magic"
+  atkType     String?      // "Melee" | "Ranged"
+  imageFile   String      // e.g. "layla.png" → prepend CDN URL in frontend
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  stats  HeroStats[]
+  builds Build[]
+  skills Skill[]
+}
+
+model HeroStats {
+  id            String       @id @default(cuid())
+  heroId        String
+  patchId       String
+  hero          Hero         @relation(fields: [heroId], references: [id])
+  patch         PatchVersion @relation(fields: [patchId], references: [id])
+
+  // Base stats (level 1)
+  baseHp        Float
+  hpGrowth      Float
+  baseMana      Float        @default(0)
+  manaGrowth    Float        @default(0)
+  baseAtkPhys   Float
+  atkPhysGrowth Float
+  baseAtkMag    Float        @default(0)
+  atkMagGrowth  Float        @default(0)
+  baseArmor     Float
+  armorGrowth   Float
+  baseMagRes    Float
+  magResGrowth  Float
+  baseMoveSpeed Float
+  baseAttackSpd Float        // attacks per second at level 1
+  atkSpdGrowth  Float        @default(0)
+  baseHpRegen   Float        @default(0)
+  baseManaRegen Float        @default(0)
+
+  @@unique([heroId, patchId])
+}
+
+model Skill {
+  id          String    @id @default(cuid())
+  heroId      String
+  hero        Hero      @relation(fields: [heroId], references: [id])
+  slot        SkillSlot // PASSIVE, S1, S2, S3, S4 (ultimate)
+  name        String
+  description String
+  imageFile   String
+
+  scalings SkillScaling[]
+
+  @@unique([heroId, slot])
+}
+
+model SkillScaling {
+  id          String         @id @default(cuid())
+  skillId     String
+  skill       Skill          @relation(fields: [skillId], references: [id])
+  level       Int            // 1-5 (or 1-12 for passives)
+  baseDamage  Float?
+  physScaling Float?         // multiplier against physical ATK
+  magScaling  Float?         // multiplier against magical power
+  cooldown    Float?
+  manaCost    Float?
+  notes       String?
+}
+
+// ---------------------------------------------------------------------------
+// Items
+// ---------------------------------------------------------------------------
+model Item {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  category    ItemCategory
+  tier        Int        @default(3) // 1=component, 2=mid, 3=full
+  imageFile   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  stats        ItemStats[]
+  buildSlots   BuildItem[]
+
+  // Self-referential for build path
+  componentOf  ItemComponent[] @relation("BuiltInto")
+  components   ItemComponent[] @relation("ComponentOf")
+}
+
+model ItemStats {
+  id          String       @id @default(cuid())
+  itemId      String
+  patchId     String
+  item        Item         @relation(fields: [itemId], references: [id])
+  patch       PatchVersion @relation(fields: [patchId], references: [id])
+
+  // Stat bonuses
+  hp          Float        @default(0)
+  mana        Float        @default(0)
+  physAtk     Float        @default(0)
+  magPower    Float        @default(0)
+  physDef     Float        @default(0)
+  magDef      Float        @default(0)
+  physPenFlat Float        @default(0)
+  physPenPct  Float        @default(0) // 0.0 – 1.0
+  magPenFlat  Float        @default(0)
+  magPenPct   Float        @default(0)
+  critRate    Float        @default(0)
+  critDamage  Float        @default(0)
+  attackSpeed Float        @default(0)
+  lifeSteal   Float        @default(0)
+  spellVamp   Float        @default(0)
+  cdr         Float        @default(0) // cooldown reduction 0.0 – 1.0
+  moveSpeed   Float        @default(0)
+  hpRegen     Float        @default(0)
+  manaRegen   Float        @default(0)
+  goldCost    Int          @default(0)
+
+  // Passive / active effect (plain text for tooltip; engine reads passiveKey for logic)
+  passiveKey  String?      // machine-readable key, e.g. "BodyOfSteel"
+  passiveName String?
+  passiveDesc String?
+
+  @@unique([itemId, patchId])
+}
+
+model ItemComponent {
+  parentId    String
+  childId     String
+  parent      Item   @relation("ComponentOf", fields: [parentId], references: [id])
+  child       Item   @relation("BuiltInto", fields: [childId], references: [id])
+
+  @@id([parentId, childId])
+}
+
+// ---------------------------------------------------------------------------
+// Emblems
+// ---------------------------------------------------------------------------
+model EmblemTree {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  imageFile String
+  attrs     Json?    // [{name: string, value: number}]
+
+  nodes EmblemNode[]
+}
+
+model EmblemNode {
+  id          String     @id @default(cuid())
+  treeId      String
+  tree        EmblemTree @relation(fields: [treeId], references: [id])
+  tier        Int        // 1, 2, or 3
+  position    Int        // 1-3 within tier
+  name        String
+  description String
+  statKey     String?    // e.g. "physAtk", "cdr"
+  statValue   Float?
+  imageFile   String
+}
+
+// ---------------------------------------------------------------------------
+// Battle Spells
+// ---------------------------------------------------------------------------
+model BattleSpell {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String
+  imageFile   String
+
+  builds Build[]
+}
+
+// ---------------------------------------------------------------------------
+// Builds
+// ---------------------------------------------------------------------------
+model Build {
+  id          String       @id @default(cuid())
+  slug        String       @unique @default(cuid())
+  title       String
+  description String?
+  heroId      String
+  patchId     String
+  spellId     String?
+  isPublic    Boolean      @default(false)
+  heroLevel   Int          @default(15)
+  upvotes     Int          @default(0)
+  downvotes   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  hero    Hero          @relation(fields: [heroId], references: [id])
+  patch   PatchVersion  @relation(fields: [patchId], references: [id])
+  spell   BattleSpell?  @relation(fields: [spellId], references: [id])
+  author  User?         @relation(fields: [authorId], references: [id])
+  authorId String?
+
+  items BuildItem[]
+}
+
+model BuildItem {
+  id     String @id @default(cuid())
+  buildId String
+  itemId  String
+  slot    Int    // 1-6
+
+  build Build @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  item  Item  @relation(fields: [itemId], references: [id])
+
+  @@unique([buildId, slot])
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) models
+// ---------------------------------------------------------------------------
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  builds   Build[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+enum HeroRole {
+  ASSASSIN
+  FIGHTER
+  MAGE
+  MARKSMAN
+  SUPPORT
+  TANK
+}
+
+enum SkillSlot {
+  PASSIVE
+  S1
+  S2
+  S3
+  S4
+}
+
+enum ItemCategory {
+  ATTACK
+  MAGIC
+  DEFENSE
+  MOVEMENT
+  ROAMING
+  JUNGLING
+}

@@ -1,0 +1,181 @@
+/**
+ * scripts/scrape-heroes.ts
+ *
+ * Scrapes all heroes from the MLBB Fandom wiki, uploads portraits to OCI CDN,
+ * and upserts records into PostgreSQL via Prisma.
+ *
+ * Usage:
+ *   npm run scrape:heroes
+ */
+
+import "dotenv/config";
+import { HeroRole } from "@prisma/client";
+import { prisma } from "../lib/prisma";
+import {
+  getCategoryMembers,
+  getPageWikitext,
+  getImageUrl,
+  slugify,
+  withRetry,
+} from "./lib/mediawiki";
+import { parseHeroInfobox } from "./lib/wikitext-parser";
+import { mirrorImageToCDN } from "../lib/oci-storage";
+
+const PATCH_VERSION = process.env.SCRAPE_PATCH ?? "1.8.88";
+
+// Category on MLBB Fandom that lists all hero pages
+const HERO_CATEGORY = "Heroes";
+
+// ---------------------------------------------------------------------------
+// Role string → Prisma enum
+// ---------------------------------------------------------------------------
+const ROLE_MAP: Record<string, HeroRole> = {
+  assassin: HeroRole.ASSASSIN,
+  fighter: HeroRole.FIGHTER,
+  mage: HeroRole.MAGE,
+  marksman: HeroRole.MARKSMAN,
+  support: HeroRole.SUPPORT,
+  tank: HeroRole.TANK,
+};
+
+function resolveRoles(roles: string[]): HeroRole[] {
+  return roles
+    .map((r) => ROLE_MAP[r.toLowerCase()])
+    .filter((r): r is HeroRole => r !== undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+async function main() {
+  console.log("🔍  Fetching hero list from Fandom wiki...");
+  const members = await getCategoryMembers(HERO_CATEGORY);
+  console.log(`   Found ${members.length} hero pages.`);
+
+  const patch = await prisma.patchVersion.upsert({
+    where: { version: PATCH_VERSION },
+    update: {},
+    create: { version: PATCH_VERSION, isLatest: true },
+  });
+
+  let processed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const member of members) {
+    try {
+      const title = member.title;
+      console.log(`\n🦸  [${processed + 1}/${members.length}] ${title}`);
+
+      const wikitext = await withRetry(() => getPageWikitext(title));
+
+      if (wikitext.startsWith("#REDIRECT")) {
+        console.log("   ↩  Skipped (redirect)");
+        skipped++;
+        continue;
+      }
+
+      // Hero pages that are NOT actual playable heroes (e.g. "List of Heroes")
+      if (!wikitext.includes("{{HeroStat") && !wikitext.includes("{{Hero")) {
+        console.log("   ↩  Skipped (no hero infobox)");
+        skipped++;
+        continue;
+      }
+
+      const raw = parseHeroInfobox(wikitext, title);
+      const slug = slugify(title);
+
+      // -------------------------------------------------------------------
+      // Upload hero portrait to OCI CDN
+      // -------------------------------------------------------------------
+      let imageFile = `${slug}.png`;
+      if (raw.imageFile) {
+        try {
+          const remoteUrl = await withRetry(() => getImageUrl(raw.imageFile!));
+          const objectKey = `heroes/${imageFile}`;
+          await withRetry(() => mirrorImageToCDN(remoteUrl, objectKey));
+          console.log(`   🖼  Portrait uploaded → ${objectKey}`);
+        } catch (imgErr) {
+          console.warn(
+            `   ⚠  Portrait upload failed: ${(imgErr as Error).message}`
+          );
+        }
+      }
+
+      const roles = resolveRoles(raw.roles);
+
+      // -------------------------------------------------------------------
+      // Upsert Hero
+      // -------------------------------------------------------------------
+      const hero = await prisma.hero.upsert({
+        where: { slug },
+        update: {
+          name: raw.name,
+          title: raw.title,
+          role: roles,
+          specialty: raw.specialty,
+          imageFile,
+          updatedAt: new Date(),
+        },
+        create: {
+          slug,
+          name: raw.name,
+          title: raw.title,
+          role: roles,
+          specialty: raw.specialty,
+          imageFile,
+        },
+      });
+
+      // -------------------------------------------------------------------
+      // Upsert HeroStats
+      // -------------------------------------------------------------------
+      const statsPayload = {
+        baseHp: raw.hp ?? 0,
+        hpGrowth: raw.hpGrowth ?? 0,
+        baseMana: raw.mana ?? 0,
+        manaGrowth: raw.manaGrowth ?? 0,
+        baseAtkPhys: raw.physAtk ?? 0,
+        atkPhysGrowth: raw.physAtkGrowth ?? 0,
+        baseAtkMag: raw.magAtk ?? 0,
+        atkMagGrowth: raw.magAtkGrowth ?? 0,
+        baseArmor: raw.armor ?? 0,
+        armorGrowth: raw.armorGrowth ?? 0,
+        baseMagRes: raw.magRes ?? 0,
+        magResGrowth: raw.magResGrowth ?? 0,
+        baseMoveSpeed: raw.moveSpeed ?? 0,
+        baseAttackSpd: raw.attackSpeed ?? 0,
+        atkSpdGrowth: raw.attackSpdGrowth ?? 0,
+        baseHpRegen: raw.hpRegen ?? 0,
+        baseManaRegen: raw.manaRegen ?? 0,
+      };
+
+      await prisma.heroStats.upsert({
+        where: { heroId_patchId: { heroId: hero.id, patchId: patch.id } },
+        update: statsPayload,
+        create: { heroId: hero.id, patchId: patch.id, ...statsPayload },
+      });
+
+      console.log(`   ✅  Upserted: ${raw.name}`);
+      processed++;
+
+      await new Promise((r) => setTimeout(r, 300));
+    } catch (err) {
+      console.error(
+        `   ❌  Failed: ${member.title} — ${(err as Error).message}`
+      );
+      failed++;
+    }
+  }
+
+  console.log(
+    `\n✨  Done. Processed: ${processed} | Skipped: ${skipped} | Failed: ${failed}`
+  );
+  await prisma.$disconnect();
+}
+
+main().catch(async (err) => {
+  console.error(err);
+  await prisma.$disconnect();
+  process.exit(1);
+});
