@@ -90,6 +90,68 @@ npm run dev
 ```
 Open http://localhost:3000 in your browser to see the app running.
 
+If `npm run dev` exits with `Another next dev server is already running`, there is already a `next dev` process using this workspace. Stop the old process and start again:
+
+```bash
+lsof -iTCP:3000 -sTCP:LISTEN -n -P
+kill <pid>
+npm run dev
+```
+
+Next.js will sometimes briefly report `3001` and still exit if it detects an existing dev server for the same app directory. The fix is to stop the earlier process, not to start a second one.
+
+## 🕷️ Scraper Scripts
+
+The main dataset ingestion commands are exposed through `package.json`:
+
+```bash
+npm run scrape:heroes
+npm run scrape:items
+npm run scrape:emblems
+npm run scrape:spells
+npm run scrape:skills
+```
+
+What each scraper does:
+
+* `npm run scrape:heroes`: pulls hero metadata from `Module:Hero/data`, mirrors portraits to the CDN, and upserts hero records into PostgreSQL.
+* `npm run scrape:items`: pulls item data from `Module:Equipment/data`, mirrors item icons, and upserts item stats.
+* `npm run scrape:emblems`: parses emblem trees and talent nodes from the `Emblems` page.
+* `npm run scrape:spells`: scrapes battle spells from the `Battle spells` page and uploads spell icons.
+* `npm run scrape:skills`: scrapes hero ability data and skill icons. You can also target specific heroes with `npx tsx scripts/scrape-skills.ts -- Miya Layla`.
+
+Useful scraper-related environment variables:
+
+```env
+SCRAPE_PATCH="1.8.88"
+NEXT_PUBLIC_CDN_URL="https://cdn.sanchez.ph/mlbb/"
+OCI_REGION="us-phoenix-1"
+OCI_S3_ENDPOINT="your-oci-s3-endpoint"
+OCI_BUCKET="your-bucket-name"
+OCI_ACCESS_KEY_ID="your-access-key"
+OCI_SECRET_ACCESS_KEY="your-secret-key"
+```
+
+Additional utility scripts in `scripts/` are meant for maintenance and debugging and are run directly with `tsx`:
+
+```bash
+npx tsx scripts/fix-hero-images.ts
+npx tsx scripts/patch-hero-images.ts
+npx tsx scripts/probe-emblems.ts
+npx tsx scripts/test-oci.ts
+```
+
+What the utility scripts are for:
+
+* `fix-hero-images.ts`: retries missing or broken hero portrait uploads.
+* `patch-hero-images.ts`: force-patches a hard-coded list of hero portraits using multiple wiki-image lookup strategies.
+* `probe-emblems.ts`: dumps source wikitext for emblem and spell-related pages to help debug parser changes.
+* `test-oci.ts`: verifies OCI object storage connectivity by listing objects and uploading a small test file.
+
+The `tmp-*` files under `scripts/` are ad hoc probes and one-off debugging utilities, not stable project commands.
+
+`db:seed` is still listed in `package.json`, but `scripts/seed-db.ts` is currently missing. Treat that command as unavailable until the seed script is restored.
+
 ## 🏗️ Project Architecture
  * /app: Next.js App Router pages, layouts, and API routes.
  * /components: Reusable UI components (split into /ui for shadcn elements and /forge for domain-specific components like ItemSlot).

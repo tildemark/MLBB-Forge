@@ -19,7 +19,7 @@ COPY . .
 RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# RUN npm run build
 
 # Production image — copy only what's needed
 FROM base AS runner

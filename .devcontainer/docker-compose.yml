@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  app:
+    # We use Microsoft's official dev image instead of your node:20-alpine Dockerfile.
+    # Alpine is great for production, but Microsoft's image comes pre-loaded with Git, 
+    # zsh, and the dependencies VS Code Server needs to run smoothly.
+    image: mcr.microsoft.com/devcontainers/javascript-node:20
+    volumes:
+      # Mounts your root project folder to /workspace in the container
+      - .:/workspace:cached
+    # Keeps the container alive so VS Code can connect
+    command: sleep infinity
+    # Waits for your local compose file's healthchecks to pass!
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
