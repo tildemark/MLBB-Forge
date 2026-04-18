@@ -43,7 +43,7 @@ Inspired by the deep UI/UX of ARPG tools like *D3Planner*, MLBB Forge allows pla
 
 ### 1. Clone the repository
 ```bash
-git clone [https://github.com/tildemark/mlbb-forge.git](https://github.com/tildemark/mlbb-forge.git)
+git clone https://github.com/tildemark/mlbb-forge.git
 cd mlbb-forge
 
 ```
@@ -57,7 +57,7 @@ Create a .env file in the root directory and add the following variables:
 ```env
 # Application
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NEXT_PUBLIC_CDN_URL="[https://cdn.sanchez.ph/mlbb/](https://cdn.sanchez.ph/mlbb/)"
+NEXT_PUBLIC_CDN_URL="https://cdn.sanchez.ph/mlbb/"
 
 # Database (PostgreSQL)
 DATABASE_URL="postgresql://user:password@localhost:5432/mlbb_forge?schema=public"
