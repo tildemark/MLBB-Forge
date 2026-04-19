@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Search, X } from "lucide-react";
-import { useForgeStore, type HeroOption, type EmblemOption, type SpellOption } from "@/lib/store";
+import { useForgeStore, type HeroOption, type EmblemOption, type SpellOption, type EmblemNode } from "@/lib/store";
 import type { HeroBaseStats } from "@/lib/calc";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from "@/components/ui/tooltip";
@@ -106,38 +106,63 @@ function HeroPicker({
             />
           </div>
 
-          {/* Role filter */}
-          <div className="mb-1 flex flex-wrap gap-1">
-            {ROLES.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRoleFilter(roleFilter === r ? null : r)}
-                className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
-                  roleFilter === r
-                    ? "bg-forge-gold text-black"
-                    : "bg-forge-bg text-white/60 hover:text-white border border-forge-border"
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
+          {/* Role + Lane filter — single icon row */}
+          <div className="mb-1 flex items-center gap-1">
+            {ROLES.map((r) => {
+              const active = roleFilter === r;
+              const file = ROLE_CDN_FILE[r.toLowerCase()];
+              return (
+                <TooltipProvider key={r} delayDuration={100}>
+                  <TooltipRoot>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setRoleFilter(active ? null : r)}
+                        className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all ${
+                          active
+                            ? "ring-2 ring-forge-gold bg-forge-gold/10"
+                            : "opacity-40 hover:opacity-80"
+                        }`}
+                      >
+                        {file
+                          ? <img src={cdnUrl("roles", file)} alt={r} className="h-5 w-5 object-contain" />
+                          : <span className="text-[9px] font-bold text-white uppercase">{r.slice(0,2)}</span>
+                        }
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs capitalize">{r}</TooltipContent>
+                  </TooltipRoot>
+                </TooltipProvider>
+              );
+            })}
 
-          {/* Lane filter */}
-          <div className="mb-1 flex flex-wrap gap-1">
-            {LANES.map((l) => (
-              <button
-                key={l.value}
-                onClick={() => setLaneFilter(laneFilter === l.value ? null : l.value)}
-                className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                  laneFilter === l.value
-                    ? "bg-forge-gold/20 text-forge-gold border border-forge-gold"
-                    : "bg-forge-bg text-white/50 hover:text-white border border-forge-border"
-                }`}
-              >
-                {l.label}
-              </button>
-            ))}
+            <span className="mx-1 h-4 w-px bg-white/10" />
+
+            {LANES.map((l) => {
+              const active = laneFilter === l.value;
+              const file = LANE_CDN_FILE[l.value.toLowerCase()];
+              return (
+                <TooltipProvider key={l.value} delayDuration={100}>
+                  <TooltipRoot>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setLaneFilter(active ? null : l.value)}
+                        className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded transition-all ${
+                          active
+                            ? "ring-2 ring-forge-gold/70 bg-forge-gold/10"
+                            : "opacity-40 hover:opacity-80"
+                        }`}
+                      >
+                        {file
+                          ? <img src={cdnUrl("lanes", file)} alt={l.label} className="h-6 w-6 object-contain" />
+                          : <span className="text-[9px] font-bold text-white uppercase">{l.label.slice(0,2)}</span>
+                        }
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">{l.label}</TooltipContent>
+                  </TooltipRoot>
+                </TooltipProvider>
+              );
+            })}
           </div>
 
           {/* Specialty filter */}
@@ -192,12 +217,85 @@ function HeroPicker({
 }
 
 // ---------------------------------------------------------------------------
-// Emblem picker
+// Emblem talent node button
+// ---------------------------------------------------------------------------
+
+function TalentNodeBtn({
+  node,
+  selected,
+  onSelect,
+}: {
+  node: EmblemNode;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <TooltipProvider key={node.id} delayDuration={100}>
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onSelect}
+            className={`relative h-10 w-10 overflow-hidden rounded-md border transition-colors ${
+              selected
+                ? "border-forge-gold glow-gold bg-forge-gold/10"
+                : "border-forge-border hover:border-forge-gold/50"
+            }`}
+          >
+            <Image
+              src={cdnUrl("talents", node.imageFile)}
+              alt={node.name}
+              fill
+              className="object-contain p-0.5"
+              unoptimized
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.opacity = "0";
+              }}
+            />
+            {selected && (
+              <div className="absolute inset-0 flex items-end justify-center pb-0.5 pointer-events-none">
+                <div className="h-1 w-1 rounded-full bg-forge-gold" />
+              </div>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-xs text-xs">
+          <p className="font-semibold">{node.name}</p>
+          {node.statKey && node.statValue != null && (
+            <p className="text-forge-gold/90 mt-0.5">+{node.statValue} {node.statKey}</p>
+          )}
+          {node.description && (
+            <p className="text-white/70 mt-0.5 leading-relaxed">{node.description}</p>
+          )}
+        </TooltipContent>
+      </TooltipRoot>
+    </TooltipProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Emblem picker (with inline talent tree)
 // ---------------------------------------------------------------------------
 
 function EmblemPicker({ emblems }: { emblems: EmblemOption[] }) {
   const emblem = useForgeStore((s) => s.emblem);
   const setEmblem = useForgeStore((s) => s.setEmblem);
+  const talents = useForgeStore((s) => s.talents);
+  const setTalent = useForgeStore((s) => s.setTalent);
+
+  // Collect all nodes from all emblems, grouped by tier, then by source emblem.
+  // This allows cross-emblem talent selection (e.g. Marksman emblem + Assassin talents).
+  const byTier = (tier: number) =>
+    emblems.flatMap((e) =>
+      e.nodes
+        .filter((n) => n.tier === tier)
+        .map((n) => ({ ...n, emblemSlug: e.slug, emblemName: e.name }))
+    );
+
+  const allTier1 = byTier(1);
+  const allTier2 = byTier(2);
+  const allTier3 = byTier(3);
+
+  const hasTalents = emblems.some((e) => e.nodes.length > 0);
 
   return (
     <div>
@@ -226,6 +324,79 @@ function EmblemPicker({ emblems }: { emblems: EmblemOption[] }) {
           </TooltipProvider>
         ))}
       </div>
+
+      {/* Selected emblem base stats */}
+      {emblem && emblem.attrs.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+          {emblem.attrs.map((a, i) => (
+            <span key={i} className="text-[10px] text-white/40">
+              +{a.value} {a.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Talent selection — cross-emblem: all nodes from all trees, grouped by tier */}
+      {hasTalents && (
+        <div className="mt-3 space-y-3">
+          {/* Tier 1 */}
+          {allTier1.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] text-white/30 uppercase tracking-wider">Tier 1</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {allTier1.map((n) => (
+                  <TalentNodeBtn
+                    key={n.id}
+                    node={n}
+                    selected={talents.standard1?.id === n.id}
+                    onSelect={() =>
+                      setTalent("standard1", talents.standard1?.id === n.id ? null : n)
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tier 2 */}
+          {allTier2.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] text-white/30 uppercase tracking-wider">Tier 2</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {allTier2.map((n) => (
+                  <TalentNodeBtn
+                    key={n.id}
+                    node={n}
+                    selected={talents.standard2?.id === n.id}
+                    onSelect={() =>
+                      setTalent("standard2", talents.standard2?.id === n.id ? null : n)
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tier 3 — core talents */}
+          {allTier3.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] text-white/30 uppercase tracking-wider">Core Talent</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {allTier3.map((n) => (
+                  <TalentNodeBtn
+                    key={n.id}
+                    node={n}
+                    selected={talents.core?.id === n.id}
+                    onSelect={() =>
+                      setTalent("core", talents.core?.id === n.id ? null : n)
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,200 +443,398 @@ function SpellPicker({ spells }: { spells: SpellOption[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// LeftPane
+// Role + lane icon helpers
 // ---------------------------------------------------------------------------
 
-export function LeftPane({
-  heroes,
+// Moonton serves role icons as .png and lane icons as .svg via the official API
+const ROLE_CDN_FILE: Record<string, string> = {
+  fighter:  "fighter.png",
+  assassin: "assassin.png",
+  mage:     "mage.png",
+  marksman: "marksman.png",
+  support:  "support.png",
+  tank:     "tank.png",
+};
+
+const LANE_CDN_FILE: Record<string, string> = {
+  "gold lane": "gold-lane.svg",
+  "exp lane":  "exp-lane.svg",
+  "mid lane":  "mid-lane.svg",
+  roaming:     "roam.svg",
+  roam:        "roam.svg",
+  jungle:      "jungle.svg",
+};
+
+function RoleIcon({ role, size = 6 }: { role: string; size?: number }) {
+  const file = ROLE_CDN_FILE[role.toLowerCase()];
+  const dim = `h-${size} w-${size}`;
+  if (!file) return (
+    <span className="rounded-sm bg-forge-border px-1.5 py-0.5 text-[10px] font-semibold text-white/70 uppercase tracking-wide">
+      {role}
+    </span>
+  );
+  return (
+    <TooltipProvider delayDuration={100}>
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <div className={`relative ${dim} shrink-0`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={cdnUrl("roles", file)}
+              alt={role}
+              className="h-full w-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0"; }}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs capitalize">{role}</TooltipContent>
+      </TooltipRoot>
+    </TooltipProvider>
+  );
+}
+
+function LaneIcon({ lane, size = 6 }: { lane: string; size?: number }) {
+  const file = LANE_CDN_FILE[lane.toLowerCase()];
+  const dim = `h-${size} w-${size}`;
+  if (!file) return (
+    <span className="rounded-sm bg-forge-border px-1.5 py-0.5 text-[10px] font-semibold text-white/70 uppercase tracking-wide">
+      {lane}
+    </span>
+  );
+  return (
+    <TooltipProvider delayDuration={100}>
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <div className={`relative ${dim} shrink-0`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={cdnUrl("lanes", file)}
+              alt={lane}
+              className="h-full w-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0"; }}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">{lane}</TooltipContent>
+      </TooltipRoot>
+    </TooltipProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Winrate badge — fetches from our proxy route
+// ---------------------------------------------------------------------------
+
+function WinRateBadge({ heroName }: { heroName: string }) {
+  const [stats, setStats] = React.useState<{ winRate: number | null; pickRate: number | null } | null>(null);
+
+  React.useEffect(() => {
+    if (!heroName) return;
+    setStats(null);
+    fetch(`/api/hero-stats/${encodeURIComponent(heroName)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setStats(d); })
+      .catch(() => {});
+  }, [heroName]);
+
+  if (!stats?.winRate) return null;
+  const wr = Math.round(stats.winRate * 100);
+  const pr = stats.pickRate != null ? Math.round(stats.pickRate * 100 * 10) / 10 : null;
+  const color = wr >= 53 ? "text-green-400" : wr >= 49 ? "text-yellow-400" : "text-red-400";
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <TooltipRoot>
+        <TooltipTrigger asChild>
+          <span className={`text-sm font-cinzel font-semibold ${color} cursor-default shrink-0`}>
+            {wr}% WR
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <p>Win rate: <span className={color}>{wr}%</span></p>
+          {pr != null && <p className="text-white/70">Pick rate: {pr}%</p>}
+        </TooltipContent>
+      </TooltipRoot>
+    </TooltipProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compact emblem + talent + spell summary row (with expandable picker)
+// ---------------------------------------------------------------------------
+
+function PlaceholderSlot({ label }: { label: string }) {
+  return (
+    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-forge-border bg-forge-bg text-[9px] text-white/20">
+      {label}
+    </div>
+  );
+}
+
+export function CompactBuildRow({
   emblems,
   spells,
 }: {
-  heroes: Array<HeroOption & { statsRecord: HeroBaseStats | null }>;
   emblems: EmblemOption[];
   spells: SpellOption[];
 }) {
+  const emblem = useForgeStore((s) => s.emblem);
+  const talents = useForgeStore((s) => s.talents);
+  const spell = useForgeStore((s) => s.spell);
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div>
+      {/* Compact summary row */}
+      <div className="flex items-center gap-1.5">
+        {/* Emblem icon */}
+        <TooltipProvider delayDuration={100}>
+          <TooltipRoot>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className={`relative h-10 w-10 overflow-hidden rounded-md border transition-colors ${
+                  emblem ? "border-forge-gold/60" : "border-forge-border hover:border-forge-gold/40"
+                }`}
+              >
+                {emblem ? (
+                  <Image src={cdnUrl("emblems", emblem.imageFile)} alt={emblem.name} fill className="object-contain p-0.5" unoptimized />
+                ) : (
+                  <PlaceholderSlot label="E" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{emblem?.name ?? "No emblem"}</TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
+
+        {/* Talent icons (t1, t2, core) */}
+        {(["standard1", "standard2", "core"] as const).map((slot) => {
+          const node = talents[slot];
+          return (
+            <TooltipProvider key={slot} delayDuration={100}>
+              <TooltipRoot>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setExpanded(!expanded)}
+                    className={`relative h-10 w-10 overflow-hidden rounded-md border transition-colors ${
+                      node ? "border-forge-gold/40" : "border-forge-border hover:border-forge-gold/30"
+                    }`}
+                  >
+                    {node ? (
+                      <Image src={cdnUrl("talents", node.imageFile)} alt={node.name} fill className="object-contain p-0.5" unoptimized />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[9px] text-white/20">—</div>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">{node?.name ?? "No talent"}</TooltipContent>
+              </TooltipRoot>
+            </TooltipProvider>
+          );
+        })}
+
+        {/* Separator */}
+        <span className="text-white/20">·</span>
+
+        {/* Spell icon */}
+        <TooltipProvider delayDuration={100}>
+          <TooltipRoot>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className={`relative h-10 w-10 overflow-hidden rounded-md border transition-colors ${
+                  spell ? "border-forge-gold/40" : "border-forge-border hover:border-forge-gold/30"
+                }`}
+              >
+                {spell ? (
+                  <Image src={cdnUrl("spells", spell.imageFile)} alt={spell.name} fill className="object-contain p-0.5" unoptimized />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[9px] text-white/20">S</div>
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{spell?.name ?? "No spell"}</TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
+
+        {/* Expand toggle */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="ml-auto text-[10px] text-white/30 hover:text-white/60 transition-colors px-1"
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          {expanded ? "▲" : "▼"}
+        </button>
+      </div>
+
+      {/* Expandable full pickers */}
+      {expanded && (
+        <div className="mt-3 space-y-4 border-t border-forge-border pt-3">
+          <EmblemPicker emblems={emblems} />
+          <SpellPicker spells={spells} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exported sections
+// ---------------------------------------------------------------------------
+
+export function HeroSection({
+  heroes,
+}: {
+  heroes: Array<HeroOption & { statsRecord: HeroBaseStats | null }>;
+}) {
   const hero = useForgeStore((s) => s.hero);
-  const heroStats = useForgeStore((s) => s.heroStats);
   const level = useForgeStore((s) => s.level);
   const setLevel = useForgeStore((s) => s.setLevel);
-  const loadedSkills = useForgeStore((s) => s.loadedSkills);
-  const activeSkillIds = useForgeStore((s) => s.activeSkillIds);
-  const toggleSkill = useForgeStore((s) => s.toggleSkill);
   const handleLevelChange = useCallback(([v]: number[]) => setLevel(v), [setLevel]);
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col gap-6 overflow-y-auto border-r border-forge-border bg-forge-surface px-4 py-6">
+    <div className="flex flex-col gap-6">
       {/* Hero portrait + name */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <HeroPicker heroes={heroes} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           {hero ? (
             <>
-              <p className="truncate font-cinzel text-base text-forge-gold">{hero.name}</p>
-              {hero.title && (
-                <p className="truncate text-xs text-white/50">{hero.title}</p>
-              )}
-              <div className="mt-1 flex flex-wrap gap-1">
-                {hero.role.map((r) => (
-                  <span
-                    key={r}
-                    className="rounded-sm bg-forge-border px-1.5 py-0.5 text-[10px] font-semibold text-white/70 uppercase tracking-wide"
-                  >
-                    {r}
-                  </span>
-                ))}
+              {/* Name row with win rate top-right */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-cinzel text-lg text-forge-gold">{hero.name}</p>
+                  {hero.title && (
+                    <p className="truncate text-xs text-white/50">{hero.title}</p>
+                  )}
+                </div>
+                <WinRateBadge heroName={hero.name} />
               </div>
-              {/* Meta row: atkType · dmgType · resource */}
-              <div className="mt-1 flex flex-wrap items-center gap-x-1 text-[10px] text-white/40">
+
+              {/* Role + lane icons — one row */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {hero.role.map((r) => (
+                  <RoleIcon key={r} role={r} size={8} />
+                ))}
+                {hero.lane && hero.role.length > 0 && (
+                  <span className="text-white/20">·</span>
+                )}
+                {hero.lane && <LaneIcon lane={hero.lane} size={8} />}
+              </div>
+
+              {/* Attack type · damage type · resource */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[10px] text-white/40">
                 {hero.atkType && <span>{hero.atkType}</span>}
                 {hero.atkType && hero.dmgType && <span>·</span>}
                 {hero.dmgType && <span>{hero.dmgType}</span>}
                 {hero.resource && hero.resource !== "Mana" && hero.resource !== "None" && (
                   <><span>·</span><span>{hero.resource}</span></>
                 )}
+                {hero.specialty && <><span>·</span><span className="text-white/30">{hero.specialty}</span></>}
               </div>
-              {/* Specialty */}
-              {hero.specialty && (
-                <div className="mt-0.5 text-[10px] text-white/30">
-                  {hero.specialty}
-                </div>
-              )}
-              {/* Lane */}
-              {hero.lane && (
-                <div className="mt-0.5 text-[10px] text-white/30">
-                  📍 {hero.lane}
-                </div>
-              )}
             </>
           ) : (
-            <p className="text-sm text-white/30">No hero selected</p>
+            <p className="text-sm text-white/30">Select a hero to begin</p>
           )}
         </div>
       </div>
 
+      {/* Abilities */}
+      {hero && <SkillsSection />}
+
       {/* Level slider */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/40">Level</p>
-          <span className="font-cinzel text-sm text-forge-gold">{level}</span>
-        </div>
-        <Slider
-          min={1}
-          max={15}
-          step={1}
-          value={[level]}
-          onValueChange={handleLevelChange}
-        />
-        <div className="mt-1 flex justify-between text-[10px] text-white/20">
-          <span>1</span>
-          <span>15</span>
-        </div>
-        {/* Per-level growth reference */}
-        {heroStats && (
-          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
-            {[
-              { label: "HP",       base: heroStats.baseHp,       growth: heroStats.hpGrowth },
-              { label: "Phys ATK", base: heroStats.baseAtkPhys,  growth: heroStats.atkPhysGrowth },
-              { label: "Armor",    base: heroStats.baseArmor,    growth: heroStats.armorGrowth },
-              { label: "Mag RES",  base: heroStats.baseMagRes,   growth: heroStats.magResGrowth },
-              { label: "ATK SPD",  base: heroStats.baseAttackSpd, growth: heroStats.atkSpdGrowth },
-              ...(heroStats.baseMana > 0
-                ? [{ label: "Mana", base: heroStats.baseMana, growth: heroStats.manaGrowth }]
-                : []),
-            ].map(({ label, base, growth }) => (
-              <div key={label} className="flex justify-between text-white/40">
-                <span>{label}</span>
-                <span className="font-mono text-white/60">
-                  {statAtLevel(base, growth, level)}
-                  {growth > 0 && <span className="text-white/25"> +{growth}/lv</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Emblem picker */}
-      <EmblemPicker emblems={emblems} />
-
-      {/* Spell picker */}
-      <SpellPicker spells={spells} />
-
-      {/* Hero skills */}
-      {loadedSkills.length > 0 && (
+      {hero && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-white/40">Abilities</p>
-          <div className="flex flex-col gap-2">
-            {loadedSkills.map((skill) => {
-              const parsedStats = parseStatEffects(skill.description);
-              const hasStats = hasStatEffects(parsedStats);
-              const isActive = activeSkillIds.includes(skill.id);
-              const slotLabel =
-                skill.slot === "PASSIVE" ? "Passive"
-                : skill.slot === "S4" ? "Ultimate"
-                : `Skill ${skill.slot.slice(1)}`;
-              return (
-                <TooltipProvider key={skill.id} delayDuration={100}>
-                  <TooltipRoot>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={hasStats ? () => toggleSkill(skill.id) : undefined}
-                        className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 transition-colors text-left ${
-                          isActive
-                            ? "border-forge-gold bg-forge-gold/10"
-                            : hasStats
-                            ? "border-forge-border bg-black/20 hover:border-forge-gold/40 cursor-pointer"
-                            : "border-forge-border bg-black/20 cursor-default"
-                        }`}
-                      >
-                        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-forge-border">
-                          <Image
-                            src={cdnUrl("skills", skill.imageFile)}
-                            alt={skill.name}
-                            fill
-                            className="object-cover"
-                            unoptimized
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center text-[8px] text-white/20 pointer-events-none">
-                            {skill.slot === "PASSIVE" ? "P" : skill.slot}
-                          </div>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-white/80 truncate">{skill.name}</p>
-                          <p className="text-[10px] text-white/30">{slotLabel}</p>
-                          {isActive && hasStats && (
-                            <p className="text-[9px] text-forge-gold/80 truncate mt-0.5">
-                              {formatStatEffects(parsedStats)}
-                            </p>
-                          )}
-                          {!isActive && hasStats && (
-                            <p className="text-[9px] text-white/20 truncate mt-0.5">
-                              click to activate buff
-                            </p>
-                          )}
-                        </div>
-                        {hasStats && (
-                          <div className={`shrink-0 h-2 w-2 rounded-full ${isActive ? "bg-forge-gold" : "bg-white/20"}`} />
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs text-xs">
-                      <p className="font-semibold mb-1">{skill.name}</p>
-                      <p className="text-white/70 leading-relaxed">{skill.description.replace(/\{\{[^}]+\}\}/g, "").replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, "$2").trim()}</p>
-                      {hasStats && (
-                        <p className="mt-1.5 text-forge-gold/90">
-                          {formatStatEffects(parsedStats)}
-                        </p>
-                      )}
-                    </TooltipContent>
-                  </TooltipRoot>
-                </TooltipProvider>
-              );
-            })}
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/40">Level</p>
+            <span className="font-cinzel text-sm text-forge-gold">{level}</span>
+          </div>
+          <Slider min={1} max={15} step={1} value={[level]} onValueChange={handleLevelChange} gradientProgress={(level - 1) / 14} />
+          <div className="mt-1 flex justify-between text-[10px] text-white/20">
+            <span>1</span>
+            <span>15</span>
           </div>
         </div>
       )}
-    </aside>
+    </div>
   );
+}
+
+export function SkillsSection() {
+  const loadedSkills = useForgeStore((s) => s.loadedSkills);
+  const activeSkillIds = useForgeStore((s) => s.activeSkillIds);
+  const toggleSkill = useForgeStore((s) => s.toggleSkill);
+
+  if (loadedSkills.length === 0) return null;
+
+  return (
+    <div className="flex gap-2">
+      {loadedSkills.map((skill) => {
+        const parsedStats = parseStatEffects(skill.description);
+        const hasStats = hasStatEffects(parsedStats);
+        const isActive = activeSkillIds.includes(skill.id);
+        const slotLabel =
+          skill.slot === "PASSIVE" ? "Passive"
+          : skill.slot === "S4" ? "Ultimate"
+          : `Skill ${skill.slot.slice(1)}`;
+        return (
+          <TooltipProvider key={skill.id} delayDuration={100}>
+            <TooltipRoot>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={hasStats ? () => toggleSkill(skill.id) : undefined}
+                  className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border transition-colors ${
+                    isActive
+                      ? "border-forge-gold bg-forge-gold/10"
+                      : hasStats
+                      ? "border-forge-border hover:border-forge-gold/40 cursor-pointer"
+                      : "border-forge-border cursor-default"
+                  }`}
+                >
+                  <Image
+                    src={cdnUrl("skills", skill.imageFile)}
+                    alt={skill.name}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  {/* Slot label badge */}
+                  <div className="absolute bottom-0 left-0 right-0 flex justify-center bg-black/50 py-px pointer-events-none">
+                    <span className="text-[8px] text-white/60 leading-none">
+                      {skill.slot === "PASSIVE" ? "P" : skill.slot === "S4" ? "ULT" : skill.slot}
+                    </span>
+                  </div>
+                  {/* Active indicator dot */}
+                  {isActive && (
+                    <div className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-forge-gold pointer-events-none" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-xs">
+                <p className="font-semibold">{skill.name}</p>
+                <p className="text-white/50 text-[10px]">{slotLabel}</p>
+                <p className="text-white/70 leading-relaxed mt-1">{skill.description.replace(/\{\{[^}]+\}\}/g, "").replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, "$2").trim()}</p>
+                {hasStats && (
+                  <p className="mt-1.5 text-forge-gold/90">{formatStatEffects(parsedStats)}</p>
+                )}
+                {hasStats && !isActive && (
+                  <p className="mt-1 text-white/30 italic">Tap to toggle buff</p>
+                )}
+              </TooltipContent>
+            </TooltipRoot>
+          </TooltipProvider>
+        );
+      })}
+    </div>
+  );
+}
+
+export function EmblemSection({ emblems }: { emblems: EmblemOption[] }) {
+  return <EmblemPicker emblems={emblems} />;
+}
+
+export function SpellSection({ spells }: { spells: SpellOption[] }) {
+  return <SpellPicker spells={spells} />;
 }

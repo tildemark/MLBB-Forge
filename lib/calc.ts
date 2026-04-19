@@ -32,18 +32,18 @@ export interface ItemStats {
   armor?: number;
   magRes?: number;
   moveSpeed?: number;
-  moveSpeedPct?: number;
-  atkSpd?: number;
-  critRate?: number;
-  critDmg?: number;
+  moveSpeedPct?: number;  // 0–100 percentage
+  atkSpd?: number;        // 0–100 percentage bonus (e.g. 10 = +10% attack speed)
+  critRate?: number;      // 0–100 percentage (e.g. 25 = 25% crit)
+  critDmg?: number;       // 0–100 percentage (e.g. 40 = +40% crit dmg bonus)
   physPen?: number;
   magPen?: number;
-  physPenPct?: number;
-  magPenPct?: number;
-  lifesteal?: number;
-  magLifesteal?: number;
+  physPenPct?: number;    // 0–100 percentage
+  magPenPct?: number;     // 0–100 percentage
+  lifesteal?: number;     // 0–100 percentage
+  magLifesteal?: number;  // 0–100 percentage
   hpRegen?: number;
-  cd?: number; // cooldown reduction %
+  cd?: number;            // 0–100 percentage (e.g. 10 = 10% CDR)
   hybridPen?: number;
   adaptiveAtk?: number;
 }
@@ -56,7 +56,9 @@ export interface FinalStats {
   armor: number;
   magRes: number;
   moveSpeed: number;
-  atkSpd: number;
+  atkSpd: number;         // capped
+  atkSpdCap: number;       // effective cap (3.00 normally, 5.00 with Golden Staff)
+  atkSpdWasted: number;    // raw speed above cap
   critRate: number;   // 0–1
   critDmg: number;    // multiplier e.g. 1.75
   physPen: number;    // flat
@@ -66,8 +68,12 @@ export interface FinalStats {
   lifesteal: number;  // 0–1
   magLifesteal: number;
   hpRegen: number;
-  cd: number;         // 0–1, hard-capped at 0.40
+  cd: number;         // 0–1, hard-capped at cdrCap
+  cdrCap: number;     // the effective CDR cap (0.40 or 0.45 with Enchanted Talisman)
   cdWasted: number;   // any % over the cap
+  critRateWasted: number; // any % over 100% crit cap
+  lifestealWasted: number;    // any % over 40% lifesteal cap
+  magLifestealWasted: number; // any % over 40% spell vamp cap
   eHP: number;
   effectivePhysAtk: number; // for display in stat sheet
 }
@@ -77,7 +83,7 @@ export function statAtLevel(base: number, growth: number, level: number): number
   return Math.round((base + growth * (level - 1)) * 100) / 100;
 }
 
-const CDR_CAP = 0.40;
+const CDR_CAP_DEFAULT = 0.40;
 
 /**
  * Compute final stats from hero base stats at a given level
@@ -86,8 +92,11 @@ const CDR_CAP = 0.40;
 export function computeStats(
   hero: HeroBaseStats,
   level: number,
-  items: ItemStats[]
+  items: ItemStats[],
+  options?: { cdrCap?: number; atkSpdCap?: number }
 ): FinalStats {
+  const CDR_CAP = options?.cdrCap ?? CDR_CAP_DEFAULT;
+  const ATK_SPD_CAP = options?.atkSpdCap ?? 3.00;
   // Sum all item contributions
   const sum = (key: keyof ItemStats): number =>
     items.reduce((acc, it) => acc + (it[key] ?? 0), 0);
@@ -103,14 +112,17 @@ export function computeStats(
   const msBase = hero.baseMoveSpeed + sum("moveSpeed");
   const moveSpeed = Math.round(msBase * (1 + sum("moveSpeedPct") / 100));
 
-  // Attack speed: base + flat bonus; game shows as value like 1.05 attacks/s
-  const atkSpd = Math.max(
+  // Attack speed: base * (1 + total % bonus); items give % bonus stored as 0–100
+  const rawAtkSpd = Math.max(
     0.1,
-    statAtLevel(hero.baseAttackSpd, hero.atkSpdGrowth, level) + sum("atkSpd")
+    statAtLevel(hero.baseAttackSpd, hero.atkSpdGrowth, level) * (1 + sum("atkSpd") / 100)
   );
+  const atkSpd = Math.min(ATK_SPD_CAP, rawAtkSpd);
+  const atkSpdWasted = Math.max(0, rawAtkSpd - ATK_SPD_CAP);
 
   // Crit
   const critRate = Math.min(1, sum("critRate") / 100);
+  const critRateWasted = Math.max(0, sum("critRate") / 100 - 1);
   const critDmg  = 1 + (sum("critDmg") || 0) / 100 + (critRate > 0 ? 0.25 : 0); // base 25% crit bonus
 
   // CDR — hard cap 40%
@@ -125,7 +137,9 @@ export function computeStats(
   const magPenPct  = Math.min(1, sum("magPenPct")  / 100);
 
   const lifesteal    = Math.min(0.40, sum("lifesteal") / 100);
+  const lifestealWasted = Math.max(0, sum("lifesteal") / 100 - 0.40);
   const magLifesteal = Math.min(0.40, sum("magLifesteal") / 100);
+  const magLifestealWasted = Math.max(0, sum("magLifesteal") / 100 - 0.40);
   const hpRegen = statAtLevel(hero.baseHpRegen, 0, level) + sum("hpRegen");
 
   // eHP: HP / (1 - DR) where DR = armor / (120 + armor)
@@ -140,7 +154,8 @@ export function computeStats(
     moveSpeed, atkSpd, critRate, critDmg,
     physPen, magPen, physPenPct, magPenPct,
     lifesteal, magLifesteal, hpRegen,
-    cd, cdWasted, eHP, effectivePhysAtk,
+    cd, cdWasted, cdrCap: CDR_CAP, atkSpdCap: ATK_SPD_CAP, atkSpdWasted,
+    critRateWasted, lifestealWasted, magLifestealWasted, eHP, effectivePhysAtk,
   };
 }
 

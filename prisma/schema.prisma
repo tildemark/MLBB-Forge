@@ -221,6 +221,9 @@ model Build {
   spellId     String?
   isPublic    Boolean      @default(false)
   heroLevel   Int          @default(15)
+  tags        String[]     @default([]) // e.g. ["Crit", "Attack Speed", "Popular"]
+  emblemSlug  String?                   // EmblemTree.slug (denormalized)
+  emblemNodeIds String[]   @default([]) // selected EmblemNode.id values (1 per tier)
   upvotes     Int          @default(0)
   downvotes   Int          @default(0)
   createdAt   DateTime     @default(now())

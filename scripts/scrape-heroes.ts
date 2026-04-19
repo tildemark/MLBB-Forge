@@ -8,11 +8,42 @@
  */
 
 import "dotenv/config";
+import { writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
 import { HeroRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { getPageWikitext, getImageUrl, slugify, withRetry } from "./lib/mediawiki";
 import { parseHeroModule } from "./lib/lua-parser";
 import { mirrorImageToCDN } from "../lib/oci-storage";
+
+const OPENMLBB_API = "https://openmlbb.fastapicloud.dev/api";
+
+/**
+ * Pre-fetch all hero portrait URLs from openmlbb API.
+ * Returns Map<lowerCaseName, imageUrl>
+ */
+async function fetchHeroImageMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  let index = 1;
+  while (true) {
+    const res = await fetch(`${OPENMLBB_API}/heroes?lang=en&size=50&index=${index}`);
+    if (!res.ok) break;
+    const json = await res.json();
+    const records: any[] = json?.data?.records ?? [];
+    if (records.length === 0) break;
+    for (const r of records) {
+      const heroData = r?.data?.hero?.data;
+      if (!heroData?.name) continue;
+      // Prefer squarehead (portrait) over head (circular crop)
+      const url = heroData.squarehead || heroData.head;
+      if (url) map.set(heroData.name.toLowerCase(), url);
+    }
+    if (records.length < 50) break;
+    index++;
+  }
+  console.log(`  openmlbb: loaded ${map.size} hero image URLs`);
+  return map;
+}
 
 const PATCH_VERSION = process.env.SCRAPE_PATCH ?? "1.8.88";
 
@@ -33,10 +64,26 @@ function resolveRoles(r1: string | null, r2: string | null): HeroRole[] {
 }
 
 async function main() {
-  console.log("??  Fetching Module:Hero/data...");
+  console.log("Pre-fetching hero image URLs from openmlbb...");
+  const heroImageMap = await fetchHeroImageMap();
+
+  console.log("\nFetching Module:Hero/data...");
   const lua = await withRetry(() => getPageWikitext("Module:Hero/data"));
   const heroes = parseHeroModule(lua);
   console.log("   Parsed " + heroes.length + " heroes from the data module.\n");
+
+  const seedHeroes: Array<{
+    slug: string; name: string; title: string | null; role: HeroRole[];
+    specialty: string | null; lane: string | null; resource: string | null;
+    dmgType: string | null; atkType: string | null; imageFile: string;
+    stats: {
+      baseHp: number; hpGrowth: number; baseMana: number; manaGrowth: number;
+      baseAtkPhys: number; atkPhysGrowth: number; baseAtkMag: number; atkMagGrowth: number;
+      baseArmor: number; armorGrowth: number; baseMagRes: number; magResGrowth: number;
+      baseMoveSpeed: number; baseAttackSpd: number; atkSpdGrowth: number;
+      baseHpRegen: number; baseManaRegen: number;
+    };
+  }> = [];
 
   const patch = await prisma.patchVersion.upsert({
     where: { version: PATCH_VERSION },
@@ -53,12 +100,23 @@ async function main() {
       const slug = slugify(raw.name);
       const imageFile = slug + ".png";
 
-      try {
-        const remoteUrl = await withRetry(() => getImageUrl(raw.name + ".png"));
-        await withRetry(() => mirrorImageToCDN(remoteUrl, "heroes/" + imageFile));
-        process.stdout.write(" ??");
-      } catch {
-        // Non-fatal
+      // Use openmlbb portrait URL first; fallback to wiki image lookup
+      const apiImageUrl = heroImageMap.get(raw.name.toLowerCase());
+      if (apiImageUrl) {
+        try {
+          await mirrorImageToCDN(apiImageUrl, "heroes/" + imageFile);
+          process.stdout.write(" [img✓]");
+        } catch {
+          process.stdout.write(" [img-]");
+        }
+      } else {
+        try {
+          const remoteUrl = await withRetry(() => getImageUrl(raw.name + ".png"));
+          await withRetry(() => mirrorImageToCDN(remoteUrl, "heroes/" + imageFile));
+          process.stdout.write(" [img✓wiki]");
+        } catch {
+          process.stdout.write(" [img-]");
+        }
       }
 
       const roles = resolveRoles(raw.role1, raw.role2);
@@ -107,16 +165,38 @@ async function main() {
         create: { heroId: hero.id, patchId: patch.id, ...statsPayload },
       });
 
-      console.log(" ?");
+      seedHeroes.push({ slug, name: raw.name, title: raw.title ?? null, role: roles, specialty, lane, resource, dmgType, atkType, imageFile, stats: statsPayload });
+      console.log(" ✓");
       processed++;
       await new Promise((r) => setTimeout(r, 150));
     } catch (err: any) {
-      console.log(" ? " + err.message);
+      console.log(" ✗ " + err.message);
       failed++;
     }
   }
 
-  console.log("\n?  Done. Processed: " + processed + " | Failed: " + failed);
+  // Save JSON snapshot
+  mkdirSync(join(process.cwd(), "data/seeds"), { recursive: true });
+  writeFileSync(
+    join(process.cwd(), "data/seeds/heroes.json"),
+    JSON.stringify({ patch: PATCH_VERSION, heroes: seedHeroes }, null, 2)
+  );
+  console.log("\n   Snapshot saved → data/seeds/heroes.json");
+
+  // Remove heroes that no longer exist in the wiki data
+  const scrapedSlugs = heroes.map((h) => slugify(h.name));
+  const staleHeroes = await prisma.hero.findMany({
+    where: { slug: { notIn: scrapedSlugs } },
+    select: { id: true, name: true },
+  });
+  if (staleHeroes.length > 0) {
+    console.log(`\n🗑  Removing ${staleHeroes.length} stale hero(s): ${staleHeroes.map((h) => h.name).join(", ")}`);
+    await prisma.heroStats.deleteMany({ where: { heroId: { in: staleHeroes.map((h) => h.id) } } });
+    await prisma.skill.deleteMany({ where: { heroId: { in: staleHeroes.map((h) => h.id) } } });
+    await prisma.hero.deleteMany({ where: { id: { in: staleHeroes.map((h) => h.id) } } });
+  }
+
+  console.log("\n✨  Done. Processed: " + processed + " | Failed: " + failed);
   await prisma.$disconnect();
 }
 

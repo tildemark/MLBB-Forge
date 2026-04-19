@@ -7,12 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "scrape:items": "tsx scripts/scrape-items.ts",
     "scrape:heroes": "tsx scripts/scrape-heroes.ts",
+    "scrape:items": "tsx scripts/scrape-items.ts",
     "scrape:emblems": "tsx scripts/scrape-emblems.ts",
     "scrape:spells": "tsx scripts/scrape-spells.ts",
     "scrape:skills": "tsx scripts/scrape-skills.ts",
-    "db:seed": "tsx scripts/seed-db.ts"
+    "scrape:icons": "tsx scripts/scrape-icons.ts",
+    "db:seed": "tsx scripts/seed-db.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "scrape:all": "npm run scrape:heroes && npm run scrape:items && npm run scrape:spells && npm run scrape:emblems && npm run scrape:skills && npm run scrape:icons"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

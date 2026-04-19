@@ -101,43 +101,43 @@ export async function getItems(): Promise<ItemOption[]> {
     orderBy: { name: "asc" },
   });
 
-  return items.map((item) => {
-    const s = item.stats[0];
-    const stats: ItemStats = s
-      ? {
-          hp: s.hp || undefined,
-          mana: s.mana || undefined,
-          physAtk: s.physAtk || undefined,
-          magPower: s.magPower || undefined,
-          armor: s.physDef || undefined,
-          magRes: s.magDef || undefined,
-          physPen: s.physPenFlat || undefined,
-          physPenPct: s.physPenPct || undefined,
-          magPen: s.magPenFlat || undefined,
-          magPenPct: s.magPenPct || undefined,
-          critRate: s.critRate || undefined,
-          critDmg: s.critDamage || undefined,
-          atkSpd: s.attackSpeed || undefined,
-          lifesteal: s.lifeSteal || undefined,
-          magLifesteal: s.spellVamp || undefined,
-          cd: s.cdr || undefined,
-          moveSpeed: s.moveSpeed || undefined,
-          hpRegen: s.hpRegen || undefined,
-        }
-      : {};
-
-    return {
-      slug: item.slug,
-      name: item.name,
-      imageFile: item.imageFile,
-      category: item.category as string,
-      tier: item.tier,
-      goldCost: s?.goldCost ?? 0,
-      passiveName: s?.passiveName ?? null,
-      passiveDesc: s?.passiveDesc ?? null,
-      stats,
-    };
-  });
+  return items
+    .map((item) => {
+      const _s = item.stats[0];
+      return {
+        slug: item.slug,
+        name: item.name,
+        imageFile: item.imageFile,
+        category: item.category as string,
+        tier: item.tier,
+        goldCost: _s?.goldCost ?? 0,
+        passiveName: _s?.passiveName ?? null,
+        passiveDesc: _s?.passiveDesc ?? null,
+        stats: _s
+          ? {
+              hp: _s.hp || undefined,
+              mana: _s.mana || undefined,
+              physAtk: _s.physAtk || undefined,
+              magPower: _s.magPower || undefined,
+              armor: _s.physDef || undefined,
+              magRes: _s.magDef || undefined,
+              physPen: _s.physPenFlat || undefined,
+              physPenPct: _s.physPenPct ? _s.physPenPct * 100 : undefined,
+              magPen: _s.magPenFlat || undefined,
+              magPenPct: _s.magPenPct ? _s.magPenPct * 100 : undefined,
+              critRate: _s.critRate ? _s.critRate * 100 : undefined,
+              critDmg: _s.critDamage ? _s.critDamage * 100 : undefined,
+              atkSpd: _s.attackSpeed ? _s.attackSpeed * 100 : undefined,
+              lifesteal: _s.lifeSteal ? _s.lifeSteal * 100 : undefined,
+              magLifesteal: _s.spellVamp ? _s.spellVamp * 100 : undefined,
+              cd: _s.cdr ? _s.cdr * 100 : undefined,
+              moveSpeed: _s.moveSpeed || undefined,
+              hpRegen: _s.hpRegen || undefined,
+            }
+          : {},
+      };
+    })
+    .sort((a, b) => b.goldCost - a.goldCost);
 }
 
 // ---------------------------------------------------------------------------

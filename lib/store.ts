@@ -10,7 +10,7 @@
 import { create } from "zustand";
 import { computeStats, type HeroBaseStats, type ItemStats, type FinalStats } from "./calc";
 import { parseStatEffects } from "./stat-parser";
-import type { SkillData } from "./actions";
+import type { SkillData, BuildSuggestion } from "./actions";
 
 // Minimal shapes for data loaded from DB (matches Prisma output)
 export interface HeroOption {
@@ -98,6 +98,7 @@ interface ForgeState {
   spell: SpellOption | null;
   loadedSkills: SkillData[];
   activeSkillIds: string[];
+  loadedBuilds: BuildSuggestion[];
 
   // Derived
   finalStats: FinalStats;
@@ -106,17 +107,20 @@ interface ForgeState {
   setHero: (hero: HeroOption, stats: HeroStatsRecord) => void;
   setLevel: (level: number) => void;
   setItem: (slot: number, item: ItemOption | null) => void;
+  moveItem: (from: number, to: number) => void;
   setEmblem: (emblem: EmblemOption | null) => void;
   setTalent: (slot: "standard1" | "standard2" | "core", node: EmblemNode | null) => void;
   setSpell: (spell: SpellOption | null) => void;
   setLoadedSkills: (skills: SkillData[]) => void;
   toggleSkill: (id: string) => void;
+  setLoadedBuilds: (builds: BuildSuggestion[]) => void;
+  applyBuild: (build: BuildSuggestion) => void;
 }
 
 const EMPTY_TALENTS: TalentSelection = { standard1: null, standard2: null, core: null };
 
 /** Map emblem base attribute names to ItemStats keys */
-const EMBLEM_ATTR_MAP: Record<string, keyof import("./calc").ItemStats> = {
+export const EMBLEM_ATTR_MAP: Record<string, keyof import("./calc").ItemStats> = {
   "hp":                 "hp",
   "physical atk":       "physAtk",
   "magic power":        "magPower",
@@ -183,7 +187,15 @@ function derive(
     }
   }
 
-  return computeStats(state.heroStats, state.level, itemStats);
+  // Enchanted Talisman raises CDR cap to 45%
+  const hasTalisman = state.items.some((i) => i?.slug === "enchanted-talisman");
+  // Golden Staff raises attack speed cap to 5.00/s
+  const hasGoldenStaff = state.items.some((i) => i?.slug === "golden-staff");
+
+  return computeStats(state.heroStats, state.level, itemStats, {
+    cdrCap: hasTalisman ? 0.45 : 0.40,
+    atkSpdCap: hasGoldenStaff ? 5.00 : 3.00,
+  });
 }
 
 export const useForgeStore = create<ForgeState>((set, get) => ({
@@ -196,6 +208,7 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
   spell: null,
   loadedSkills: [],
   activeSkillIds: [],
+  loadedBuilds: [],
   finalStats: EMPTY_STATS,
 
   setHero(hero, heroStats) {
@@ -207,7 +220,7 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
     const loadedSkills: SkillData[] = [];
     const activeSkillIds: string[] = [];
     const finalStats = derive({ heroStats, level, items, emblem, talents, spell, loadedSkills, activeSkillIds });
-    set({ hero, heroStats, loadedSkills, activeSkillIds, finalStats });
+    set({ hero, heroStats, loadedSkills, activeSkillIds, loadedBuilds: [], finalStats });
   },
 
   setLevel(level) {
@@ -219,6 +232,15 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
   setItem(slot, item) {
     const items = [...get().items];
     items[slot] = item;
+    const finalStats = derive({ ...get(), items });
+    set({ items, finalStats });
+  },
+
+  moveItem(from, to) {
+    if (from === to) return;
+    const items = [...get().items];
+    // Swap the two slots
+    [items[from], items[to]] = [items[to], items[from]];
     const finalStats = derive({ ...get(), items });
     set({ items, finalStats });
   },
@@ -253,5 +275,24 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
       : [...prev, id];
     const finalStats = derive({ ...get(), activeSkillIds });
     set({ activeSkillIds, finalStats });
+  },
+
+  setLoadedBuilds(builds) {
+    set({ loadedBuilds: builds });
+  },
+
+  applyBuild(build) {
+    // Fill item slots in order; remaining slots are null
+    const items: (ItemOption | null)[] = Array(MAX_ITEMS).fill(null);
+    for (const bi of build.items) {
+      const slot = bi.slot - 1; // DB slots are 1-indexed
+      if (slot >= 0 && slot < MAX_ITEMS) items[slot] = bi.item;
+    }
+    const spell = build.spell;
+    const level = build.heroLevel;
+    const emblem = build.emblem;
+    const talents = build.talents;
+    const finalStats = derive({ ...get(), items, spell, level, emblem, talents });
+    set({ items, spell, level, emblem, talents, finalStats });
   },
 }));

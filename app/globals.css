@@ -27,6 +27,15 @@ body {
   font-family: var(--font-inter), sans-serif;
 }
 
+/* Stat flash animation */
+@keyframes stat-flash {
+  0%   { color: #ffffff; }
+  100% { color: var(--stat-end-color, #e8e8e8); }
+}
+.stat-flash {
+  animation: stat-flash 0.55s ease-out forwards;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #12121a; }
@@ -36,4 +45,13 @@ body {
 /* Gold glow utility */
 .glow-gold {
   box-shadow: 0 0 12px 2px #c8a84b44;
+}
+
+/* Hide scrollbar but keep scrollability */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

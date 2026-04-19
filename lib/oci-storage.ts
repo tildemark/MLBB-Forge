@@ -88,7 +88,7 @@ export async function uploadToCDN(
       ContentType: contentType,
       // Make objects publicly readable (bucket must have public read policy)
       ACL: "public-read",
-      CacheControl: "public, max-age=31536000, immutable",
+      CacheControl: "public, max-age=604800",
     })
   );
 

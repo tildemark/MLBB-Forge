@@ -154,9 +154,10 @@ function extractBraceBlock(src: string, openPos: number): string {
 export function parseHeroModule(lua: string): LuaHeroRecord[] {
   const heroes: LuaHeroRecord[] = [];
 
-  // Match top-level hero entries: lines starting with \t["Name"] = {
+  // Match top-level hero entries: lines starting with optional whitespace then ["Name"] = {
   // Using brace-counting so nested sub-tables (like ["stats"]) are included.
-  const keyRe = /\n\t\["([^\]]+)"\]\s*=\s*\{/g;
+  // Some wiki entries use spaces, tabs, mixed, or no indentation at all.
+  const keyRe = /\n[ \t]*\["([^\]]+)"\]\s*=\s*\{/g;
   let m: RegExpExecArray | null;
 
   while ((m = keyRe.exec(lua)) !== null) {
