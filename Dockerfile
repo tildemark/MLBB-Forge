@@ -18,6 +18,9 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
+# NEXT_PUBLIC_* vars are baked into the bundle at build time — set them here
+ENV NEXT_PUBLIC_APP_URL="https://forge.sanchez.ph"
+ENV NEXT_PUBLIC_CDN_URL="https://cdn.sanchez.ph/mlbb/"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
