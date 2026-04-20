@@ -14,7 +14,6 @@ services:
     image: mlbb_forge_app:latest
     container_name: mlbb_forge_app
     restart: unless-stopped
-    env_file: .env
     environment:
       NODE_ENV: production
       # Public URL — overrides the localhost value in .env
