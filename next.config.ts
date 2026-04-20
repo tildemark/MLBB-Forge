@@ -8,6 +8,18 @@ const nextConfig = {
         hostname: "cdn.sanchez.ph",
         pathname: "/mlbb/**",
       },
+      {
+        protocol: "https",
+        hostname: "akmweb.youngjoygame.com",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+      },
     ],
   },
 };

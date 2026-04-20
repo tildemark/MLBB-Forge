@@ -526,7 +526,7 @@ function LaneIcon({ lane, size = 6 }: { lane: string; size?: number }) {
 // ---------------------------------------------------------------------------
 
 function WinRateBadge({ heroName }: { heroName: string }) {
-  const [stats, setStats] = React.useState<{ winRate: number | null; pickRate: number | null } | null>(null);
+  const [stats, setStats] = React.useState<{ winRate: number | null; pickRate: number | null; banRate: number | null } | null>(null);
 
   React.useEffect(() => {
     if (!heroName) return;
@@ -538,24 +538,17 @@ function WinRateBadge({ heroName }: { heroName: string }) {
   }, [heroName]);
 
   if (!stats?.winRate) return null;
-  const wr = Math.round(stats.winRate * 100);
+  const wr = Math.round(stats.winRate * 100 * 10) / 10;
   const pr = stats.pickRate != null ? Math.round(stats.pickRate * 100 * 10) / 10 : null;
+  const br = stats.banRate != null ? Math.round(stats.banRate * 100 * 10) / 10 : null;
   const color = wr >= 53 ? "text-green-400" : wr >= 49 ? "text-yellow-400" : "text-red-400";
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <TooltipRoot>
-        <TooltipTrigger asChild>
-          <span className={`text-sm font-cinzel font-semibold ${color} cursor-default shrink-0`}>
-            {wr}% WR
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          <p>Win rate: <span className={color}>{wr}%</span></p>
-          {pr != null && <p className="text-white/70">Pick rate: {pr}%</p>}
-        </TooltipContent>
-      </TooltipRoot>
-    </TooltipProvider>
+    <div className="flex flex-col gap-0 leading-tight shrink-0">
+      <span className={`text-[11px] font-semibold ${color}`}>Win Rate: {wr}%</span>
+      {pr != null && <span className="text-[11px] text-white/50">Pick Rate: {pr}%</span>}
+      {br != null && <span className="text-[11px] text-white/50">Ban Rate: {br}%</span>}
+    </div>
   );
 }
 

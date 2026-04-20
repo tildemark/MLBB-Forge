@@ -82,9 +82,17 @@ const MAX_ITEMS = 6;
 const EMPTY_STATS: FinalStats = {
   hp: 0, mana: 0, physAtk: 0, magPower: 0,
   armor: 0, magRes: 0, moveSpeed: 0, atkSpd: 0,
-  critRate: 0, critDmg: 1, physPen: 0, magPen: 0,
-  physPenPct: 0, magPenPct: 0, lifesteal: 0, magLifesteal: 0,
-  hpRegen: 0, cd: 0, cdWasted: 0, eHP: 0, effectivePhysAtk: 0,
+  atkSpdCap: 3.0, atkSpdWasted: 0,
+  critRate: 0, critDmg: 1, critRateWasted: 0,
+  physPen: 0, magPen: 0,
+  physPenPct: 0, magPenPct: 0,
+  lifesteal: 0, lifestealWasted: 0,
+  magLifesteal: 0, magLifestealWasted: 0,
+  hpRegen: 0, cd: 0, cdrCap: 0.4, cdWasted: 0,
+  eHP: 0, effectivePhysAtk: 0,
+  goldenStaffAtkSpdBonus: 0,
+  bloodWingsShield: 0,
+  holyXtalBoost: 0,
 };
 
 interface ForgeState {
@@ -99,6 +107,10 @@ interface ForgeState {
   loadedSkills: SkillData[];
   activeSkillIds: string[];
   loadedBuilds: BuildSuggestion[];
+  itemConditions: {
+    bodActive: boolean;      // Blade of Despair: target < 50% HP
+    warAxeStacks: number;    // 0–6 stacks
+  };
 
   // Derived
   finalStats: FinalStats;
@@ -115,6 +127,7 @@ interface ForgeState {
   toggleSkill: (id: string) => void;
   setLoadedBuilds: (builds: BuildSuggestion[]) => void;
   applyBuild: (build: BuildSuggestion) => void;
+  setItemCondition: <K extends keyof ForgeState["itemConditions"]>(key: K, value: ForgeState["itemConditions"][K]) => void;
 }
 
 const EMPTY_TALENTS: TalentSelection = { standard1: null, standard2: null, core: null };
@@ -139,7 +152,7 @@ export const EMBLEM_ATTR_MAP: Record<string, keyof import("./calc").ItemStats> =
 };
 
 function derive(
-  state: Pick<ForgeState, "heroStats" | "level" | "items" | "emblem" | "talents" | "spell" | "loadedSkills" | "activeSkillIds">
+  state: Pick<ForgeState, "heroStats" | "level" | "items" | "emblem" | "talents" | "spell" | "loadedSkills" | "activeSkillIds" | "itemConditions">
 ): FinalStats {
   if (!state.heroStats) return EMPTY_STATS;
   const itemStats: ItemStats[] = state.items
@@ -188,14 +201,51 @@ function derive(
   }
 
   // Enchanted Talisman raises CDR cap to 45%
-  const hasTalisman = state.items.some((i) => i?.slug === "enchanted-talisman");
-  // Golden Staff raises attack speed cap to 5.00/s
+  const hasTalisman    = state.items.some((i) => i?.slug === "enchanted-talisman");
+  // Golden Staff: raises atk spd cap to 5.00/s AND converts all crit rate → attack speed bonus
   const hasGoldenStaff = state.items.some((i) => i?.slug === "golden-staff");
+  // War Axe: Fighting Spirit stacks add +12 Phys ATK per stack (0–6)
+  const hasWarAxe = state.items.some((i) => i?.slug === "war-axe");
+  if (hasWarAxe && state.itemConditions.warAxeStacks > 0) {
+    itemStats.push({ physAtk: 12 * state.itemConditions.warAxeStacks });
+  }
 
-  return computeStats(state.heroStats, state.level, itemStats, {
+  let goldenStaffBonus = 0;
+  if (hasGoldenStaff) {
+    const totalCritRate = itemStats.reduce((acc, s) => acc + (s.critRate ?? 0), 0);
+    if (totalCritRate > 0) {
+      goldenStaffBonus = totalCritRate;
+      // Cancel out all crit rate and re-add as attack speed bonus
+      itemStats.push({ atkSpd: totalCritRate, critRate: -totalCritRate });
+    }
+  }
+
+  const result = computeStats(state.heroStats, state.level, itemStats, {
     cdrCap: hasTalisman ? 0.45 : 0.40,
     atkSpdCap: hasGoldenStaff ? 5.00 : 3.00,
   });
+  result.goldenStaffAtkSpdBonus = goldenStaffBonus;
+
+  // Holy Crystal — Mystery: +21% Magic Power at lv1, scaling to +35% at lv15
+  const hasHolyCrystal = state.items.some((i) => i?.slug === "holy-crystal");
+  const holyXtalBoost = hasHolyCrystal ? 21 + (state.level - 1) : 0; // 21% lv1 → 35% lv15
+  if (hasHolyCrystal) {
+    result.magPower = Math.round(result.magPower * (1 + holyXtalBoost / 100));
+  }
+  result.holyXtalBoost = holyXtalBoost;
+
+  // Blood Wings — Guard shield: 800 + 1 × Total Magic Power (after Holy Crystal boost)
+  const hasBloodWings = state.items.some((i) => i?.slug === "blood-wings");
+  result.bloodWingsShield = hasBloodWings ? Math.round(800 + result.magPower) : 0;
+
+  // Blade of Despair — Despair: +25% Physical Attack when target < 50% HP
+  const hasBoD = state.items.some((i) => i?.slug === "blade-of-despair");
+  if (hasBoD && state.itemConditions.bodActive) {
+    result.physAtk = Math.round(result.physAtk * 1.25);
+    result.effectivePhysAtk = Math.round(result.physAtk * (1 + result.critRate * (result.critDmg - 1)));
+  }
+
+  return result;
 }
 
 export const useForgeStore = create<ForgeState>((set, get) => ({
@@ -209,17 +259,20 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
   loadedSkills: [],
   activeSkillIds: [],
   loadedBuilds: [],
+  itemConditions: { bodActive: false, warAxeStacks: 0 },
   finalStats: EMPTY_STATS,
 
   setHero(hero, heroStats) {
-    const level = get().level;
-    const items = get().items;
-    const emblem = get().emblem;
-    const talents = get().talents;
-    const spell = get().spell;
+    const s = get();
+    const level = s.level;
+    const items = s.items;
+    const emblem = s.emblem;
+    const talents = s.talents;
+    const spell = s.spell;
+    const itemConditions = s.itemConditions;
     const loadedSkills: SkillData[] = [];
     const activeSkillIds: string[] = [];
-    const finalStats = derive({ heroStats, level, items, emblem, talents, spell, loadedSkills, activeSkillIds });
+    const finalStats = derive({ heroStats, level, items, emblem, talents, spell, loadedSkills, activeSkillIds, itemConditions });
     set({ hero, heroStats, loadedSkills, activeSkillIds, loadedBuilds: [], finalStats });
   },
 
@@ -294,5 +347,11 @@ export const useForgeStore = create<ForgeState>((set, get) => ({
     const talents = build.talents;
     const finalStats = derive({ ...get(), items, spell, level, emblem, talents });
     set({ items, spell, level, emblem, talents, finalStats });
+  },
+
+  setItemCondition(key, value) {
+    const itemConditions = { ...get().itemConditions, [key]: value };
+    const finalStats = derive({ ...get(), itemConditions });
+    set({ itemConditions, finalStats });
   },
 }));

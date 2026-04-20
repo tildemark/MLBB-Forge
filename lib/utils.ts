@@ -7,6 +7,6 @@ export function cn(...inputs: ClassValue[]) {
 
 export const CDN_BASE = "https://cdn.sanchez.ph/mlbb";
 
-export function cdnUrl(type: "heroes" | "items" | "emblems" | "spells" | "skills" | "talents", file: string) {
+export function cdnUrl(type: "heroes" | "items" | "emblems" | "spells" | "skills" | "talents" | "roles" | "lanes", file: string) {
   return `${CDN_BASE}/${type}/${file}`;
 }

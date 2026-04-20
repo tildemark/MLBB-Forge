@@ -236,6 +236,20 @@ model Build {
   authorId String?
 
   items BuildItem[]
+  votes BuildVote[]
+}
+
+model BuildVote {
+  id        String   @id @default(cuid())
+  buildId   String
+  userId    String
+  direction String   // "up" | "down"
+  createdAt DateTime @default(now())
+
+  build Build @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([buildId, userId])
 }
 
 model BuildItem {
@@ -264,6 +278,7 @@ model User {
   accounts Account[]
   sessions Session[]
   builds   Build[]
+  buildVotes BuildVote[]
 }
 
 model Account {

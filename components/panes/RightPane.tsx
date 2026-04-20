@@ -216,6 +216,7 @@ export function StatSheet() {
   const loadedSkills = useForgeStore((s) => s.loadedSkills);
   const heroStats = useForgeStore((s) => s.heroStats);
   const level = useForgeStore((s) => s.level);
+  const itemConditions = useForgeStore((s) => s.itemConditions);
 
   const s: FinalStats = finalStats;
   const cdDisplay = pct(s.cd);
@@ -286,9 +287,33 @@ export function StatSheet() {
         <StatRow label="Phys ATK" value={num(s.physAtk)} valueColor={vc}
           breakdown={heroStats ? bkd(heroStats.baseAtkPhys, heroStats.atkPhysGrowth, itemSum(["physAtk","adaptiveAtk"])) : undefined}
           sources={flat(["physAtk", "adaptiveAtk"])} />
+        {itemConditions.bodActive && items.some((i) => i?.slug === "blade-of-despair") && (
+          <div className="mb-1 flex items-center gap-1.5 rounded bg-amber-950/40 border border-amber-700/30 px-2 py-1 text-[10px]">
+            <span className="text-amber-400">⚔</span>
+            <span className="text-amber-300/80">
+              Blade of Despair active: <span className="font-semibold text-amber-300">+25% Physical Attack</span>
+            </span>
+          </div>
+        )}
+        {items.some((i) => i?.slug === "berserkers-fury") && s.goldenStaffAtkSpdBonus > 0 && (
+          <div className="mb-1 flex items-center gap-1.5 rounded bg-red-950/40 border border-red-700/30 px-2 py-1 text-[10px]">
+            <span className="text-red-400">⚠</span>
+            <span className="text-red-300/80">
+              <span className="font-semibold">Anti-synergy:</span> Berserker&apos;s Fury crit damage is wasted — Golden Staff converts all Crit Rate to Atk Speed
+            </span>
+          </div>
+        )}
         <StatRow label="Mag Power" value={num(s.magPower)} valueColor={vc}
           breakdown={heroStats ? bkd(heroStats.baseAtkMag, heroStats.atkMagGrowth, itemSum(["magPower"])) : undefined}
           sources={flat(["magPower"])} />
+        {s.holyXtalBoost > 0 && (
+          <div className="mb-1 flex items-center gap-1.5 rounded bg-purple-950/40 border border-purple-700/30 px-2 py-1 text-[10px]">
+            <span className="text-purple-400">✦</span>
+            <span className="text-purple-300/80">
+              Holy Crystal: <span className="font-semibold text-purple-300">+{s.holyXtalBoost}%</span> Magic Power (Mystery)
+            </span>
+          </div>
+        )}
         <StatRow label="Atk Speed"
           value={s.atkSpdWasted > 0 ? `${s.atkSpdCap.toFixed(2)}/s (cap)` : `${s.atkSpd.toFixed(2)}/s`}
           warn={s.atkSpdWasted > 0} valueColor={vc}
@@ -296,9 +321,17 @@ export function StatSheet() {
         {s.atkSpdWasted > 0 && (
           <CapNotice label="Atk Speed" wasted={`${s.atkSpdWasted.toFixed(2)}/s`} cap={`${s.atkSpdCap.toFixed(2)}/s`} />
         )}
-        <StatRow label="Crit Rate" value={s.critRateWasted > 0 ? `100% (cap)` : pct(s.critRate)}
+        <StatRow label="Crit Rate" value={s.goldenStaffAtkSpdBonus > 0 ? "0% (converted)" : s.critRateWasted > 0 ? `100% (cap)` : pct(s.critRate)}
           warn={s.critRateWasted > 0} valueColor={vc}
           sources={pctSrc(["critRate"])} />
+        {s.goldenStaffAtkSpdBonus > 0 && (
+          <div className="mb-1 flex items-center gap-1.5 rounded bg-amber-950/40 border border-amber-700/30 px-2 py-1 text-[10px]">
+            <span className="text-amber-400">⚡</span>
+            <span className="text-amber-300/80">
+              Golden Staff: <span className="font-semibold text-amber-300">+{s.goldenStaffAtkSpdBonus}%</span> Atk Speed (converted from Crit)
+            </span>
+          </div>
+        )}
         {s.critRateWasted > 0 && (
           <CapNotice label="Crit Rate" wasted={pct(s.critRateWasted)} cap="100%" />
         )}
@@ -337,6 +370,14 @@ export function StatSheet() {
         <StatRow label="HP" value={num(s.hp)} valueColor={vc}
           breakdown={heroStats ? bkd(heroStats.baseHp, heroStats.hpGrowth, itemSum(["hp"])) : undefined}
           sources={flat(["hp"])} />
+        {s.bloodWingsShield > 0 && (
+          <div className="mb-1 flex items-center gap-1.5 rounded bg-blue-950/40 border border-blue-700/30 px-2 py-1 text-[10px]">
+            <span className="text-blue-400">🛡</span>
+            <span className="text-blue-300/80">
+              Blood Wings Guard: <span className="font-semibold text-blue-300">{s.bloodWingsShield.toLocaleString()} Shield</span> (800 + Mag Power)
+            </span>
+          </div>
+        )}
         {s.mana > 0 && (
           <StatRow label="Mana" value={num(s.mana)} valueColor={vc}
             breakdown={heroStats ? bkd(heroStats.baseMana, heroStats.manaGrowth, itemSum(["mana"])) : undefined}

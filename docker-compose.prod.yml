@@ -1,33 +1,39 @@
-# docker-compose.prod.yml — Production (OCI compute instance)
-# Usage: docker compose -f docker-compose.prod.yml up -d
+# docker-compose.prod.yml — Production (OCI Always Free)
+# Deployed via Portainer stack (GitHub repo integration).
+# TLS/reverse-proxy is handled externally by Nginx Proxy Manager
+# which sits on the shared external Docker network "net".
 #
-# The Next.js app is built and served as a container alongside Postgres + Redis.
-# Traefik handles TLS and reverse proxying for forge.sanchez.ph
+# Usage:  docker compose -f docker-compose.prod.yml up -d
+# Nginx Proxy Manager → forward to  http://mlbb_forge_app:3000  (domain: forge.sanchez.ph)
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    image: mlbb_forge_app:latest
     container_name: mlbb_forge_app
     restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
+      # Public URL — overrides the localhost value in .env
+      NEXT_PUBLIC_APP_URL: "https://forge.sanchez.ph"
+      AUTH_URL: "https://forge.sanchez.ph"
+      # Override DATABASE_URL to use the internal service name
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+      # Override REDIS_URL to use the internal service name + password
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+    command: >
+      sh -c "npx prisma migrate deploy && node server.js"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.mlbb-forge.rule=Host(`forge.sanchez.ph`)"
-      - "traefik.http.routers.mlbb-forge.entrypoints=websecure"
-      - "traefik.http.routers.mlbb-forge.tls.certresolver=letsencrypt"
-      - "traefik.http.services.mlbb-forge.loadbalancer.server.port=3000"
     networks:
-      - web
-      - internal
+      - net       # reachable by Nginx Proxy Manager
+      - internal  # reaches postgres + redis
 
   postgres:
     image: postgres:16-alpine
@@ -46,7 +52,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # No external port exposure in prod — app connects via Docker network
 
   redis:
     image: redis:7-alpine
@@ -63,38 +68,12 @@ services:
       timeout: 5s
       retries: 5
 
-  traefik:
-    image: traefik:v3.3
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - letsencrypt:/letsencrypt
-    networks:
-      - web
-
 volumes:
   postgres_data:
   redis_data:
-  letsencrypt:
 
 networks:
-  web:
-    external: true
+  net:
+    external: true   # shared network where Nginx Proxy Manager lives
   internal:
-    driver: bridge
+    driver: bridge   # private — postgres + redis not exposed externally

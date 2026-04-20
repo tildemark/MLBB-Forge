@@ -76,6 +76,9 @@ export interface FinalStats {
   magLifestealWasted: number; // any % over 40% spell vamp cap
   eHP: number;
   effectivePhysAtk: number; // for display in stat sheet
+  goldenStaffAtkSpdBonus: number; // crit% converted to atk spd by Golden Staff (0 if not equipped)
+  bloodWingsShield: number;       // Guard shield value from Blood Wings (0 if not equipped)
+  holyXtalBoost: number;          // % Magic Power boost from Holy Crystal (0 if not equipped, else 21-35)
 }
 
 /** Stat value at a given level using the linear growth model */
@@ -156,6 +159,9 @@ export function computeStats(
     lifesteal, magLifesteal, hpRegen,
     cd, cdWasted, cdrCap: CDR_CAP, atkSpdCap: ATK_SPD_CAP, atkSpdWasted,
     critRateWasted, lifestealWasted, magLifestealWasted, eHP, effectivePhysAtk,
+    goldenStaffAtkSpdBonus: 0,
+    bloodWingsShield: 0,
+    holyXtalBoost: 0,
   };
 }
 
@@ -170,4 +176,77 @@ export function calcDamageDealt(
   const afterPct  = afterFlat * (1 - pctPen);
   const dr = afterPct / (120 + afterPct);
   return Math.round(rawDmg * (1 - dr));
+}
+
+// ---------------------------------------------------------------------------
+// Skill damage engine
+// ---------------------------------------------------------------------------
+
+export interface SkillDamageResult {
+  rawPhys: number;
+  rawMag: number;
+  dealtPhys: number;
+  dealtMag: number;
+  total: number;
+  cooldown: number | null; // effective after CDR
+  manaCost: number | null;
+}
+
+/**
+ * Compute skill damage at the player's current stats vs a configurable target.
+ * - Pure physical skills: base + physScaling * physAtk → apply phys pen
+ * - Pure magical skills:  base + magScaling * magPower → apply mag pen
+ * - Hybrid skills (both scalings set): phys component + magic component summed
+ * - No scaling (base only): treated as physical
+ */
+export function calcSkillDamage(
+  s: {
+    baseDamage: number | null;
+    physScaling: number | null;
+    magScaling: number | null;
+    cooldown: number | null;
+    manaCost: number | null;
+  },
+  stats: FinalStats,
+  targetArmor = 80,
+  targetMagRes = 50,
+): SkillDamageResult {
+  const base    = s.baseDamage ?? 0;
+  const hasPhys = (s.physScaling ?? 0) > 0;
+  const hasMag  = (s.magScaling  ?? 0) > 0;
+
+  let rawPhys = 0;
+  let rawMag  = 0;
+
+  if (hasPhys && hasMag) {
+    // Hybrid: base damage goes to the magic component
+    rawPhys = Math.round(s.physScaling! * stats.physAtk);
+    rawMag  = Math.round(base + s.magScaling! * stats.magPower);
+  } else if (hasPhys) {
+    rawPhys = Math.round(base + s.physScaling! * stats.physAtk);
+  } else if (hasMag) {
+    rawMag  = Math.round(base + s.magScaling! * stats.magPower);
+  } else {
+    // Pure base — treat as physical (e.g. true damage placeholder)
+    rawPhys = Math.round(base);
+  }
+
+  const dealtPhys = rawPhys > 0
+    ? calcDamageDealt(rawPhys, targetArmor, stats.physPen, stats.physPenPct)
+    : 0;
+  const dealtMag = rawMag > 0
+    ? calcDamageDealt(rawMag, targetMagRes, stats.magPen, stats.magPenPct)
+    : 0;
+
+  const cooldown = s.cooldown != null
+    ? Math.round(s.cooldown * (1 - stats.cd) * 10) / 10
+    : null;
+
+  return {
+    rawPhys, rawMag,
+    dealtPhys, dealtMag,
+    total: dealtPhys + dealtMag,
+    cooldown,
+    manaCost: s.manaCost,
+  };
 }
