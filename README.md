@@ -1,5 +1,7 @@
 # ⚔️ MLBB Forge
 
+**Version:** `0.1.0` — see [`CHANGELOG.md`](./CHANGELOG.md) for release notes.
+
 **MLBB Forge** is a production-ready, high-performance theorycrafting sandbox for Mobile Legends: Bang Bang (MLBB).
 
 Inspired by the deep UI/UX of tools like *D3Planner*, MLBB Forge lets players build loadouts, test item synergies, and simulate exact game mechanics (Effective HP, DPS, Burst Damage) before stepping foot in the Land of Dawn.
@@ -35,6 +37,7 @@ Inspired by the deep UI/UX of tools like *D3Planner*, MLBB Forge lets players bu
 - **OAuth Login** — Google + Discord via Auth.js (NextAuth v5); session available both server and client side
 - **Redis Caching** — Hero builds cached 60 s, invalidated on publish/delete/vote; graceful degradation if Redis is down
 - **Rate Limiting** — Publish/clone: 10/day per user; votes: 200/hour per user
+- **PWA Support** — installable on Android and modern browsers with a web manifest and service worker
 
 ---
 
@@ -105,9 +108,34 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+Once loaded, the app registers a service worker and can be installed as a PWA on supported browsers.
+
 ---
 
-## 🕷️ Scraper Scripts
+## � Android APK Wrapper
+MLBB Forge now includes a Capacitor Android wrapper that loads the hosted web app.
+
+### Build the Android project
+```bash
+npm install
+npm run cap:sync
+npm run cap:open
+```
+
+That opens the Android project in Android Studio. From there:
+1. Build `app` → `Build Bundle(s) / APK(s)`
+2. choose `Build APK(s)` or `Build Bundle(s)`
+3. install the generated APK on an Android device
+
+### Notes
+- The Android wrapper now loads a local shell page first and attempts to open the hosted web app when online.
+- If no internet connection is available, it shows a friendly offline screen rather than a default browser error page.
+- For local development with a running `next dev`, temporarily configure `server.url` in `capacitor.config.ts`, run `npm run cap:sync`, and then open the Android project.
+- The wrapper uses the PWA manifest and service worker metadata for install behavior.
+
+---
+
+## �🕷️ Scraper Scripts
 
 ```bash
 npm run scrape:heroes    # hero metadata + portraits → CDN + DB

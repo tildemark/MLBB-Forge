@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Cinzel } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const cinzel = Cinzel({ subsets: ["latin"], variable: "--font-cinzel", weight: ["400", "700"] });
@@ -13,6 +14,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "https://forge.sanchez.ph"
   ),
+  manifest: "/manifest.json",
+  icons: [
+    { rel: "icon", url: "/icon.svg" },
+    { rel: "apple-touch-icon", url: "/icon-512.svg", sizes: "512x512" },
+  ],
   openGraph: {
     title: "MLBB Forge – Min-Max Sandbox",
     description:
@@ -44,7 +50,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} ${cinzel.variable} antialiased`}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {children}
+          <ServiceWorkerRegister />
+        </SessionProvider>
       </body>
     </html>
   );
